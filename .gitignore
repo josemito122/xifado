@@ -141,3 +141,6 @@ client/public/__manus__/version.json
 .env
 .env.*
 !.env.example
+.env
+.env.*
+!.env.example
