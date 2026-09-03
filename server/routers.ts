@@ -1,40 +1,32 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { randomUUID } from "node:crypto";
-
 import { publicProcedure, router } from "./_core/trpc.js";
 import { getSessionCookieOptions } from "./_core/cookies.js";
 import { ENV } from "./_core/env.js";
-
 import {
   getXifadoState,
   saveXifadoState,
   mutateXifadoState,
 } from "./db.js";
-
 import type { XifadoData } from "../shared/xifado.js";
-
 import {
   hashParticipantPassword,
   verifyParticipantPassword,
 } from "./security.js";
-
 import {
   getCredentialHash,
   listCredentialHashes,
   upsertCredentialHash,
 } from "./credentials.js";
-
 import {
   createParticipantSession,
   readParticipantSession,
 } from "./participant-session.js";
-
 import {
   createMasterSession,
   readMasterSession,
 } from "./master-session.js";
-
 import {
   assertRateLimit,
   requestKey,
@@ -70,9 +62,7 @@ const safeStateSchema = z.object({
     start: z.string().datetime(),
     end: z.string().datetime(),
   }),
-
   members: z.record(z.string(), memberSchema),
-
   penalties: z.array(
     z.object({
       id: z.string(),
@@ -81,7 +71,6 @@ const safeStateSchema = z.object({
       completedBy: z.record(z.string(), z.boolean()),
     }),
   ),
-
   rules: z.array(
     z.object({
       id: z.string(),
@@ -154,7 +143,6 @@ const requireParticipantSession = async (ctx: { req: any }) => {
   }
 
   const data = await getXifadoState();
-
   const member = data.members[session.name];
 
   if (
@@ -176,14 +164,14 @@ const requireParticipantSession = async (ctx: { req: any }) => {
 
 const assertActiveCycle = (data: XifadoData) => {
   const now = Date.now();
-
   const start = Date.parse(data.schedule.start);
   const end = Date.parse(data.schedule.end);
 
   if (now < start || now >= end) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "A ação só pode ser feita durante o período ativo.",
+      message:
+        "A ação só pode ser feita durante o período ativo.",
     });
   }
 
@@ -196,25 +184,20 @@ const assertActiveCycle = (data: XifadoData) => {
 
 export const appRouter = router({
   xifado: router({
-
-    /*
-     * ============================================================
-     * ESTADO PÚBLICO
-     * ============================================================
-     */
+    // ============================================================
+    // ESTADO PÚBLICO
+    // ============================================================
 
     state: publicProcedure.query(async () => {
       return publicState(await getXifadoState());
     }),
 
-    /*
-     * ============================================================
-     * LOGIN UNIFICADO
-     *
-     * mestre + senha mestre -> acesso mestre
-     * participante + senha -> acesso participante
-     * ============================================================
-     */
+    // ============================================================
+    // LOGIN UNIFICADO
+    //
+    // mestre + senha mestre = acesso mestre
+    // participante + senha = acesso participante
+    // ============================================================
 
     login: publicProcedure
       .input(
@@ -226,9 +209,10 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         const name = normalizeName(input.name);
 
-        /*
-         * LOGIN MESTRE
-         */
+        // ----------------------------------------------------------
+        // LOGIN MESTRE
+        // ----------------------------------------------------------
+
         if (name.toLowerCase() === "mestre") {
           try {
             await assertRateLimit(
@@ -239,7 +223,8 @@ export const appRouter = router({
           } catch {
             throw new TRPCError({
               code: "TOO_MANY_REQUESTS",
-              message: "Muitas tentativas. Aguarde alguns minutos.",
+              message:
+                "Muitas tentativas. Aguarde alguns minutos.",
             });
           }
 
@@ -264,16 +249,20 @@ export const appRouter = router({
             },
           );
 
-          clearXifadoCookie(ctx, PARTICIPANT_COOKIE);
+          clearXifadoCookie(
+            ctx,
+            PARTICIPANT_COOKIE,
+          );
 
           return {
             role: "master",
           } as const;
         }
 
-        /*
-         * LOGIN PARTICIPANTE
-         */
+        // ----------------------------------------------------------
+        // LOGIN PARTICIPANTE
+        // ----------------------------------------------------------
+
         try {
           await assertRateLimit(
             `participant-login:${requestKey(ctx.req as never)}`,
@@ -283,7 +272,8 @@ export const appRouter = router({
         } catch {
           throw new TRPCError({
             code: "TOO_MANY_REQUESTS",
-            message: "Muitas tentativas. Aguarde um minuto.",
+            message:
+              "Muitas tentativas. Aguarde um minuto.",
           });
         }
 
@@ -332,7 +322,10 @@ export const appRouter = router({
           },
         );
 
-        clearXifadoCookie(ctx, MASTER_COOKIE);
+        clearXifadoCookie(
+          ctx,
+          MASTER_COOKIE,
+        );
 
         return {
           role: "participant",
@@ -340,11 +333,10 @@ export const appRouter = router({
         } as const;
       }),
 
-    /*
-     * ============================================================
-     * LOGIN ANTIGO — MANTIDO PARA COMPATIBILIDADE
-     * ============================================================
-     */
+    // ============================================================
+    // LOGIN ANTIGO
+    // Mantido para compatibilidade
+    // ============================================================
 
     participantLogin: publicProcedure
       .input(
@@ -363,7 +355,8 @@ export const appRouter = router({
         } catch {
           throw new TRPCError({
             code: "TOO_MANY_REQUESTS",
-            message: "Muitas tentativas. Aguarde um minuto.",
+            message:
+              "Muitas tentativas. Aguarde um minuto.",
           });
         }
 
@@ -414,30 +407,36 @@ export const appRouter = router({
           },
         );
 
+        clearXifadoCookie(
+          ctx,
+          MASTER_COOKIE,
+        );
+
         return {
           name: resolvedName,
         } as const;
       }),
 
-    /*
-     * ============================================================
-     * LOGOUT PARTICIPANTE
-     * ============================================================
-     */
+    // ============================================================
+    // LOGOUT PARTICIPANTE
+    // ============================================================
 
-    participantLogout: publicProcedure.mutation(({ ctx }) => {
-      clearXifadoCookie(ctx, PARTICIPANT_COOKIE);
+    participantLogout: publicProcedure.mutation(
+      ({ ctx }) => {
+        clearXifadoCookie(
+          ctx,
+          PARTICIPANT_COOKIE,
+        );
 
-      return {
-        success: true,
-      } as const;
-    }),
+        return {
+          success: true,
+        } as const;
+      },
+    ),
 
-    /*
-     * ============================================================
-     * DECLARAR PERDA
-     * ============================================================
-     */
+    // ============================================================
+    // DECLARAR PERDA
+    // ============================================================
 
     declareLossSession: publicProcedure
       .input(
@@ -450,68 +449,68 @@ export const appRouter = router({
         const session =
           await requireParticipantSession(ctx);
 
-        const updated = await mutateXifadoState((data) => {
-          const current =
-            data.members[session.name];
+        const updated =
+          await mutateXifadoState((data) => {
+            const current =
+              data.members[session.name];
 
-          if (
-            !current ||
-            current.eliminated ||
-            current.active === false
-          ) {
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message:
-                "Este participante já está eliminado.",
-            });
-          }
+            if (
+              !current ||
+              current.eliminated ||
+              current.active === false
+            ) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message:
+                  "Este participante já está eliminado.",
+              });
+            }
 
-          const { start, now } =
-            assertActiveCycle(data);
+            const { start, now } =
+              assertActiveCycle(data);
 
-          if (
-            input.timestamp < start ||
-            input.timestamp > now + 1000
-          ) {
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message:
-                "O horário informado está fora do período permitido.",
-            });
-          }
+            if (
+              input.timestamp < start ||
+              input.timestamp > now + 1000
+            ) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message:
+                  "O horário informado está fora do período permitido.",
+              });
+            }
 
-          const reason =
-            input.reason?.trim() ?? "";
+            const reason =
+              input.reason?.trim() ?? "";
 
-          data.members[session.name] = {
-            ...current,
-            eliminated: true,
-            timestamp: input.timestamp,
-            reason,
-            rank: null,
-            duration: null,
-            lossHistory: [
-              ...(current.lossHistory ?? []),
-              {
-                occurredAt: input.timestamp,
-                recordedAt: new Date().toISOString(),
-                reason,
-                status: "LOSS_DECLARED",
-              },
-            ],
-          };
+            data.members[session.name] = {
+              ...current,
+              eliminated: true,
+              timestamp: input.timestamp,
+              reason,
+              rank: null,
+              duration: null,
+              lossHistory: [
+                ...(current.lossHistory ?? []),
+                {
+                  occurredAt: input.timestamp,
+                  recordedAt:
+                    new Date().toISOString(),
+                  reason,
+                  status: "LOSS_DECLARED",
+                },
+              ],
+            };
 
-          return data;
-        });
+            return data;
+          });
 
         return publicState(updated);
       }),
 
-    /*
-     * ============================================================
-     * PRENDA DO PARTICIPANTE
-     * ============================================================
-     */
+    // ============================================================
+    // PRENDA DO PARTICIPANTE
+    // ============================================================
 
     togglePenaltyCompletion: publicProcedure
       .input(
@@ -523,54 +522,57 @@ export const appRouter = router({
         const session =
           await requireParticipantSession(ctx);
 
-        const updated = await mutateXifadoState((data) => {
-          const member =
-            data.members[session.name];
+        const updated =
+          await mutateXifadoState((data) => {
+            const member =
+              data.members[session.name];
 
-          if (
-            !member ||
-            member.active === false
-          ) {
-            throw new TRPCError({
-              code: "UNAUTHORIZED",
-              message:
-                "Participante não está ativo.",
-            });
-          }
+            if (
+              !member ||
+              member.active === false
+            ) {
+              throw new TRPCError({
+                code: "UNAUTHORIZED",
+                message:
+                  "Participante não está ativo.",
+              });
+            }
 
-          const penalty =
-            data.penalties.find(
-              (item) =>
-                item.id === input.penaltyId,
-            );
+            const penalty =
+              data.penalties.find(
+                (item) =>
+                  item.id === input.penaltyId,
+              );
 
-          if (!penalty || !penalty.visible) {
-            throw new TRPCError({
-              code: "NOT_FOUND",
-              message: "Prenda não encontrada.",
-            });
-          }
+            if (
+              !penalty ||
+              !penalty.visible
+            ) {
+              throw new TRPCError({
+                code: "NOT_FOUND",
+                message:
+                  "Prenda não encontrada.",
+              });
+            }
 
-          penalty.completedBy[session.name] =
-            !penalty.completedBy[session.name];
+            penalty.completedBy[session.name] =
+              !penalty.completedBy[session.name];
 
-          return data;
-        });
+            return data;
+          });
 
         return publicState(updated);
       }),
 
-    /*
-     * ============================================================
-     * ÁREA MESTRE
-     * ============================================================
-     */
+    // ============================================================
+    // ÁREA MESTRE
+    // ============================================================
 
     master: router({
+      // ==========================================================
+      // LOGIN MESTRE ANTIGO
+      // ==========================================================
 
-      /*
-       * LOGIN MESTRE ANTIGO
-       */
       verify: publicProcedure
         .input(
           z.object({
@@ -606,11 +608,13 @@ export const appRouter = router({
 
           if (
             !ENV.xifadoMasterCode ||
-            input.masterCode !== ENV.xifadoMasterCode
+            input.masterCode !==
+              ENV.xifadoMasterCode
           ) {
             throw new TRPCError({
               code: "FORBIDDEN",
-              message: "Senha mestre incorreta.",
+              message:
+                "Senha mestre incorreta.",
             });
           }
 
@@ -622,8 +626,14 @@ export const appRouter = router({
             token,
             {
               ...getSessionCookieOptions(ctx.req),
-              maxAge: 1000 * 60 * 60 * 12,
+              maxAge:
+                1000 * 60 * 60 * 12,
             },
+          );
+
+          clearXifadoCookie(
+            ctx,
+            PARTICIPANT_COOKIE,
           );
 
           return {
@@ -631,30 +641,26 @@ export const appRouter = router({
           } as const;
         }),
 
-      /*
-       * LOGOUT MESTRE
-       */
-      logout: publicProcedure.mutation(({ ctx }) => {
-        clearXifadoCookie(ctx, MASTER_COOKIE);
+      // ==========================================================
+      // LOGOUT MESTRE
+      // ==========================================================
 
-        return {
-          success: true,
-        } as const;
-      }),
+      logout: publicProcedure.mutation(
+        ({ ctx }) => {
+          clearXifadoCookie(
+            ctx,
+            MASTER_COOKIE,
+          );
 
-      /*
-       * ==========================================================
-       * ADICIONAR / REATIVAR PARTICIPANTE
-       *
-       * Se o nome já existe mas está inativo:
-       * - reativa
-       * - permite definir nova senha
-       * - aumenta sessionVersion
-       *
-       * Se não existe:
-       * - cria normalmente
-       * ==========================================================
-       */
+          return {
+            success: true,
+          } as const;
+        },
+      ),
+
+      // ==========================================================
+      // ADICIONAR / REATIVAR PARTICIPANTE
+      // ==========================================================
 
       addMember: publicProcedure
         .input(
@@ -680,23 +686,29 @@ export const appRouter = router({
           const existing =
             data.members[name];
 
-          /*
-           * ------------------------------------------------------
-           * REATIVAR USUÁRIO REMOVIDO
-           * ------------------------------------------------------
-           */
+          // ------------------------------------------------------
+          // REATIVAR USUÁRIO REMOVIDO
+          //
+          // O cadastro antigo continua existindo.
+          // A senha antiga continua disponível no banco/estado.
+          // O mestre pode informar a MESMA senha novamente.
+          // ------------------------------------------------------
 
           if (
             existing &&
             existing.active === false
           ) {
-            /*
-             * Verifica se a nova senha já pertence
-             * a outro participante.
-             */
             const ownHash =
               (await getCredentialHash(name)) ??
               data.credentials[name];
+
+            if (!ownHash) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message:
+                  "Esse participante foi removido, mas sua senha não foi encontrada. Cadastre uma nova senha.",
+              });
+            }
 
             const allHashes =
               await listCredentialHashes();
@@ -704,8 +716,9 @@ export const appRouter = router({
             let duplicatePassword = false;
 
             for (const stored of allHashes) {
+              // É a própria senha do participante.
+              // Portanto, ela pode ser reutilizada.
               if (
-                ownHash &&
                 stored === ownHash
               ) {
                 continue;
@@ -730,9 +743,6 @@ export const appRouter = router({
               });
             }
 
-            /*
-             * Reativa o participante.
-             */
             data.members[name] = {
               ...existing,
               eliminated: false,
@@ -744,16 +754,19 @@ export const appRouter = router({
               removedAt: null,
               removedBy: null,
               sessionVersion:
-                (existing.sessionVersion ?? 1) + 1,
+                (existing.sessionVersion ?? 1) +
+                1,
               lossHistory:
                 existing.lossHistory ?? [],
             };
 
-            /*
-             * Cria/atualiza a senha.
-             */
+            // Regrava a senha informada.
+            // Se for a mesma senha antiga, o resultado continua
+            // sendo válido, apenas com um novo hash/salt.
             const passwordHash =
-              await hashParticipantPassword(code);
+              await hashParticipantPassword(
+                code,
+              );
 
             data.credentials[name] =
               passwordHash;
@@ -770,11 +783,9 @@ export const appRouter = router({
             return publicState(data);
           }
 
-          /*
-           * ------------------------------------------------------
-           * PARTICIPANTE JÁ ATIVO
-           * ------------------------------------------------------
-           */
+          // ------------------------------------------------------
+          // PARTICIPANTE JÁ ATIVO
+          // ------------------------------------------------------
 
           if (existing) {
             throw new TRPCError({
@@ -784,11 +795,9 @@ export const appRouter = router({
             });
           }
 
-          /*
-           * ------------------------------------------------------
-           * LIMITE
-           * ------------------------------------------------------
-           */
+          // ------------------------------------------------------
+          // LIMITE
+          // ------------------------------------------------------
 
           const activeCount =
             Object.values(data.members)
@@ -806,25 +815,29 @@ export const appRouter = router({
             });
           }
 
-          /*
-           * ------------------------------------------------------
-           * SENHA DUPLICADA
-           * ------------------------------------------------------
-           */
+          // ------------------------------------------------------
+          // SENHA DUPLICADA
+          // ------------------------------------------------------
+
+          const dbHashes =
+            await listCredentialHashes();
 
           const allHashes = [
-            ...(await listCredentialHashes()),
-            ...Object.values(data.credentials),
+            ...dbHashes,
+            ...Object.values(
+              data.credentials,
+            ),
           ];
 
           const duplicatePassword =
             (
               await Promise.all(
-                allHashes.map((stored) =>
-                  verifyParticipantPassword(
-                    code,
-                    stored,
-                  ),
+                allHashes.map(
+                  (stored) =>
+                    verifyParticipantPassword(
+                      code,
+                      stored,
+                    ),
                 ),
               )
             ).some(Boolean);
@@ -837,11 +850,9 @@ export const appRouter = router({
             });
           }
 
-          /*
-           * ------------------------------------------------------
-           * CRIA NOVO PARTICIPANTE
-           * ------------------------------------------------------
-           */
+          // ------------------------------------------------------
+          // CRIAR NOVO PARTICIPANTE
+          // ------------------------------------------------------
 
           data.members[name] = {
             eliminated: false,
@@ -857,7 +868,9 @@ export const appRouter = router({
           };
 
           const passwordHash =
-            await hashParticipantPassword(code);
+            await hashParticipantPassword(
+              code,
+            );
 
           data.credentials[name] =
             passwordHash;
@@ -874,17 +887,17 @@ export const appRouter = router({
           return publicState(data);
         }),
 
-      /*
-       * ==========================================================
-       * REMOVER PARTICIPANTE
-       *
-       * IMPORTANTE:
-       * NÃO APAGA MAIS.
-       *
-       * Apenas marca active=false.
-       * Assim ele pode ser reativado depois.
-       * ==========================================================
-       */
+      // ==========================================================
+      // REMOVER PARTICIPANTE
+      //
+      // IMPORTANTE:
+      // NÃO apaga o participante.
+      // NÃO apaga a credencial.
+      // Apenas marca active = false.
+      //
+      // Assim, "Adicionar participante" poderá encontrar
+      // esse mesmo cadastro e reativá-lo depois.
+      // ==========================================================
 
       removeMember: publicProcedure
         .input(
@@ -912,9 +925,6 @@ export const appRouter = router({
             });
           }
 
-          /*
-           * Só conta participantes ativos.
-           */
           const activeMembers =
             Object.values(data.members)
               .filter(
@@ -922,7 +932,10 @@ export const appRouter = router({
                   item.active !== false,
               );
 
-          if (activeMembers.length <= 1) {
+          if (
+            member.active !== false &&
+            activeMembers.length <= 1
+          ) {
             throw new TRPCError({
               code: "BAD_REQUEST",
               message:
@@ -930,11 +943,17 @@ export const appRouter = router({
             });
           }
 
-          /*
-           * NÃO DELETAR.
-           *
-           * Apenas desativar.
-           */
+          // ======================================================
+          // NÃO APAGAR:
+          //
+          // delete data.members[name]
+          // delete data.credentials[name]
+          // deleteCredential(name)
+          //
+          // O cadastro e a senha precisam continuar existindo
+          // para permitir a reativação posterior.
+          // ======================================================
+
           data.members[name] = {
             ...member,
             active: false,
@@ -942,18 +961,11 @@ export const appRouter = router({
               new Date().toISOString(),
             removedBy: "mestre",
             sessionVersion:
-              (member.sessionVersion ?? 1) + 1,
+              (member.sessionVersion ?? 1) +
+              1,
           };
 
-          /*
-           * Mantém a senha no banco.
-           * Isso permite reativação posterior.
-           */
-
-          /*
-           * Remove apenas a marcação da pessoa
-           * nas prendas.
-           */
+          // Remove somente as marcações das prendas.
           for (const penalty of data.penalties) {
             delete penalty.completedBy[name];
           }
@@ -965,13 +977,12 @@ export const appRouter = router({
           return publicState(data);
         }),
 
-      /*
-       * ==========================================================
-       * REATIVAR PARTICIPANTE
-       *
-       * Funciona mesmo sem trocar a senha.
-       * ==========================================================
-       */
+      // ==========================================================
+      // REATIVAR PARTICIPANTE
+      //
+      // Funciona para registros antigos/inativos.
+      // Não altera a senha.
+      // ==========================================================
 
       revive: publicProcedure
         .input(
@@ -999,13 +1010,11 @@ export const appRouter = router({
             });
           }
 
-          /*
-           * Se estava removido, reativa.
-           */
           const history =
             current.timestamp
               ? [
-                  ...(current.lossHistory ?? []),
+                  ...(current.lossHistory ??
+                    []),
                   {
                     occurredAt:
                       current.timestamp,
@@ -1017,7 +1026,7 @@ export const appRouter = router({
                       "REVIVED" as const,
                   },
                 ]
-              : (current.lossHistory ?? []);
+              : current.lossHistory ?? [];
 
           data.members[name] = {
             ...current,
@@ -1030,18 +1039,11 @@ export const appRouter = router({
             removedAt: null,
             removedBy: null,
             sessionVersion:
-              (current.sessionVersion ?? 1) + 1,
+              (current.sessionVersion ?? 1) +
+              1,
             lossHistory: history,
           };
 
-          /*
-           * Se por algum motivo a credencial antiga
-           * não existir mais, não inventamos senha.
-           *
-           * Nesse caso o mestre deve usar
-           * "Adicionar participante" com o mesmo nome
-           * para definir uma nova senha.
-           */
           await mutateXifadoState(
             () => data,
           );
@@ -1049,11 +1051,9 @@ export const appRouter = router({
           return publicState(data);
         }),
 
-      /*
-       * ==========================================================
-       * AGENDA
-       * ==========================================================
-       */
+      // ==========================================================
+      // AGENDA
+      // ==========================================================
 
       setSchedule: publicProcedure
         .input(
@@ -1071,7 +1071,8 @@ export const appRouter = router({
           ) {
             throw new TRPCError({
               code: "BAD_REQUEST",
-              message: "Agenda inválida.",
+              message:
+                "Agenda inválida.",
             });
           }
 
@@ -1090,16 +1091,17 @@ export const appRouter = router({
           return publicState(data);
         }),
 
-      /*
-       * ==========================================================
-       * PRENDAS
-       * ==========================================================
-       */
+      // ==========================================================
+      // PRENDAS
+      // ==========================================================
 
       addPenalty: publicProcedure
         .input(
           z.object({
-            text: z.string().min(3).max(500),
+            text: z
+              .string()
+              .min(3)
+              .max(500),
           }),
         )
         .mutation(async ({ input, ctx }) => {
@@ -1108,7 +1110,9 @@ export const appRouter = router({
           const data =
             await getXifadoState();
 
-          if (data.penalties.length >= 100) {
+          if (
+            data.penalties.length >= 100
+          ) {
             throw new TRPCError({
               code: "BAD_REQUEST",
               message:
@@ -1120,18 +1124,19 @@ export const appRouter = router({
             id: `penalty-${randomUUID()}`,
             text: input.text.trim(),
             visible: true,
-            completedBy: Object.fromEntries(
-              Object.keys(data.members)
-                .filter(
-                  (name) =>
-                    data.members[name]
-                      .active !== false,
-                )
-                .map((name) => [
-                  name,
-                  false,
-                ]),
-            ),
+            completedBy:
+              Object.fromEntries(
+                Object.keys(data.members)
+                  .filter(
+                    (name) =>
+                      data.members[name]
+                        .active !== false,
+                  )
+                  .map((name) => [
+                    name,
+                    false,
+                  ]),
+              ),
           });
 
           await mutateXifadoState(
@@ -1145,7 +1150,10 @@ export const appRouter = router({
         .input(
           z.object({
             id: z.string(),
-            text: z.string().min(3).max(500),
+            text: z
+              .string()
+              .min(3)
+              .max(500),
           }),
         )
         .mutation(async ({ input, ctx }) => {
@@ -1163,6 +1171,8 @@ export const appRouter = router({
           if (!item) {
             throw new TRPCError({
               code: "NOT_FOUND",
+              message:
+                "Prenda não encontrada.",
             });
           }
 
@@ -1197,6 +1207,8 @@ export const appRouter = router({
           if (!item) {
             throw new TRPCError({
               code: "NOT_FOUND",
+              message:
+                "Prenda não encontrada.",
             });
           }
 
@@ -1231,6 +1243,8 @@ export const appRouter = router({
           if (!item) {
             throw new TRPCError({
               code: "NOT_FOUND",
+              message:
+                "Prenda não encontrada.",
             });
           }
 
@@ -1243,16 +1257,17 @@ export const appRouter = router({
           return publicState(data);
         }),
 
-      /*
-       * ==========================================================
-       * REGRAS
-       * ==========================================================
-       */
+      // ==========================================================
+      // REGRAS
+      // ==========================================================
 
       addRule: publicProcedure
         .input(
           z.object({
-            text: z.string().min(3).max(500),
+            text: z
+              .string()
+              .min(3)
+              .max(500),
           }),
         )
         .mutation(async ({ input, ctx }) => {
@@ -1261,7 +1276,9 @@ export const appRouter = router({
           const data =
             await getXifadoState();
 
-          if (data.rules.length >= 100) {
+          if (
+            data.rules.length >= 100
+          ) {
             throw new TRPCError({
               code: "BAD_REQUEST",
               message:
@@ -1286,7 +1303,10 @@ export const appRouter = router({
         .input(
           z.object({
             id: z.string(),
-            text: z.string().min(3).max(500),
+            text: z
+              .string()
+              .min(3)
+              .max(500),
           }),
         )
         .mutation(async ({ input, ctx }) => {
@@ -1304,6 +1324,8 @@ export const appRouter = router({
           if (!item) {
             throw new TRPCError({
               code: "NOT_FOUND",
+              message:
+                "Regra não encontrada.",
             });
           }
 
@@ -1338,6 +1360,8 @@ export const appRouter = router({
           if (!item) {
             throw new TRPCError({
               code: "NOT_FOUND",
+              message:
+                "Regra não encontrada.",
             });
           }
 
@@ -1372,6 +1396,8 @@ export const appRouter = router({
           if (!item) {
             throw new TRPCError({
               code: "NOT_FOUND",
+              message:
+                "Regra não encontrada.",
             });
           }
 
@@ -1384,11 +1410,9 @@ export const appRouter = router({
           return publicState(data);
         }),
 
-      /*
-       * ==========================================================
-       * SUBSTITUIR ESTADO
-       * ==========================================================
-       */
+      // ==========================================================
+      // SUBSTITUIR ESTADO
+      // ==========================================================
 
       replaceState: publicProcedure
         .input(
