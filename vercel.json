@@ -1,0 +1,16 @@
+{
+  "buildCommand": "vite build",
+  "outputDirectory": "dist/public",
+  "functions": {
+    "api/**/*.ts": {
+      "runtime": "nodejs24.x",
+      "includeFiles": ["server/**/*.ts", "shared/**/*.ts", "vite.config.ts"]
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
