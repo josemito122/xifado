@@ -53,6 +53,29 @@ export const DEFAULT_MEMBER_NAMES = [
   "Matheus",
 ] as const;
 
+
+export const RANKS = [
+  { min: 29, max: 30, label: "Monge", symbol: "∞", mark: "♾️" },
+  { min: 27, max: 28, label: "Rei", symbol: "XIV", mark: "👑" },
+  { min: 25, max: 26, label: "General", symbol: "XIII", mark: "⭐⭐⭐" },
+  { min: 23, max: 24, label: "Coronel", symbol: "XII", mark: "⭐" },
+  { min: 21, max: 22, label: "Major", symbol: "XI", mark: "🎖️🎖️🎖️" },
+  { min: 19, max: 20, label: "Capitão", symbol: "X", mark: "🎖️🎖️" },
+  { min: 17, max: 18, label: "Primeiro Tenente", symbol: "IX", mark: "🎖️" },
+  { min: 15, max: 16, label: "Segundo Tenente", symbol: "VIII", mark: "🏅" },
+  { min: 13, max: 14, label: "Asp. a Oficial", symbol: "VII", mark: "⚜️⚜️" },
+  { min: 11, max: 12, label: "Subtenente", symbol: "VI", mark: "⚜️" },
+  { min: 9, max: 10, label: "Primeiro Sargento", symbol: "V", mark: "🥇" },
+  { min: 7, max: 8, label: "Segundo Sargento", symbol: "IV", mark: "🥈" },
+  { min: 5, max: 6, label: "Terceiro Sargento", symbol: "III", mark: "🥉" },
+  { min: 3, max: 4, label: "Cabo", symbol: "II", mark: "🎗️" },
+  { min: 0, max: 2, label: "Soldado", symbol: "I", mark: "🪂" },
+] as const;
+
+export const rankForDay = (day: number) =>
+  RANKS.find((rank) => day >= rank.min && day <= rank.max) ??
+  RANKS[RANKS.length - 1];
+
 export const DEFAULT_RULES: RuleRecord[] = [
   { id: "rule-start", text: "Antes do marco inicial, o placar permanece bloqueado e todos iniciam como sobreviventes.", visible: true },
   { id: "rule-register", text: "Cada baixa deve registrar data, hora e motivo com honestidade.", visible: true },

@@ -9,7 +9,7 @@
     saveXifadoState,
     mutateXifadoState,
   } from "./db.js";
-  import type { XifadoData } from "../shared/xifado.js";
+  import { RANKS, type XifadoData } from "../shared/xifado.js";
   import {
     hashParticipantPassword,
     verifyParticipantPassword,
@@ -34,6 +34,60 @@
 
   const PARTICIPANT_COOKIE = "xifado_participant_session";
   const MASTER_COOKIE = "xifado_master_session";
+
+  const participantPasswordForVerification = (value: string) =>
+    value.toUpperCase();
+
+  const verifyParticipantPasswordFlexible = async (
+    password: string,
+    stored: string,
+  ) => {
+    const normalized = participantPasswordForVerification(password);
+
+    if (await verifyParticipantPassword(normalized, stored)) {
+      return true;
+    }
+
+    if (normalized !== password) {
+      return verifyParticipantPassword(password, stored);
+    }
+
+    return false;
+  };
+
+  const rankAtTimestamp = (
+    timestamp: number,
+    scheduleStart: string,
+  ) => {
+    const start = Date.parse(scheduleStart);
+    const rawDay = Math.floor((timestamp - start) / 86400000) + 1;
+    const day = Math.max(1, Math.min(30, rawDay));
+    const rank =
+      RANKS.find((item) => day >= item.min && day <= item.max) ??
+      RANKS[RANKS.length - 1];
+    return `${rank.label} · ${rank.symbol}`;
+  };
+
+  const durationAtTimestamp = (
+    timestamp: number,
+    scheduleStart: string,
+  ) => {
+    const total = Math.max(
+      0,
+      Math.floor((timestamp - Date.parse(scheduleStart)) / 1000),
+    );
+    const days = Math.floor(total / 86400);
+    const hours = Math.floor((total % 86400) / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const seconds = total % 60;
+    const pad = (value: number) => String(value).padStart(2, "0");
+
+    return days
+      ? `${days}d ${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`
+      : hours
+        ? `${hours}h ${pad(minutes)}m ${pad(seconds)}s`
+        : `${minutes}m ${pad(seconds)}s`;
+  };
 
   const memberSchema = z.object({
     eliminated: z.boolean(),
@@ -89,39 +143,6 @@
 
   const normalizeName = (value: string) =>
     value.trim().replace(/\s+/g, " ");
-
-  const normalizeParticipantPassword = (value: string) =>
-    value.toUpperCase();
-
-  const verifyParticipantPasswordFlexible = async (
-    password: string,
-    stored: string,
-  ) => {
-    const normalized = normalizeParticipantPassword(password);
-
-    // Novas credenciais são gravadas em maiúsculas.
-    if (await verifyParticipantPassword(normalized, stored)) {
-      return true;
-    }
-
-    // Compatibilidade com hashes antigos que eventualmente tenham sido
-    // criados usando a capitalização original da senha.
-    if (normalized !== password) {
-      return verifyParticipantPassword(password, stored);
-    }
-
-    return false;
-  };
-
-  const resolveMemberName = (
-    members: XifadoData["members"],
-    name: string,
-  ) =>
-    Object.keys(members).find(
-      (key) =>
-        normalizeName(key).toLowerCase() ===
-        name.toLowerCase(),
-    );
 
   const cookieValue = (
     req: {
@@ -312,7 +333,11 @@
 
           const data = await getXifadoState();
 
-          const memberName = resolveMemberName(data.members, name);
+          const memberName = Object.keys(data.members).find(
+            (key) =>
+              normalizeName(key).toLowerCase() ===
+              name.toLowerCase(),
+          );
 
           const resolvedName = memberName ?? name;
 
@@ -394,7 +419,11 @@
           const name = normalizeName(input.name);
 
           const resolvedName =
-            resolveMemberName(data.members, name) ?? name;
+            Object.keys(data.members).find(
+              (key) =>
+                normalizeName(key).toLowerCase() ===
+                name.toLowerCase(),
+            ) ?? name;
 
           const stored =
             (await getCredentialHash(resolvedName)) ??
@@ -513,8 +542,14 @@
                 eliminated: true,
                 timestamp: input.timestamp,
                 reason,
-                rank: null,
-                duration: null,
+                rank: rankAtTimestamp(
+                  input.timestamp,
+                  data.schedule.start,
+                ),
+                duration: durationAtTimestamp(
+                  input.timestamp,
+                  data.schedule.start,
+                ),
                 lossHistory: [
                   ...(current.lossHistory ?? []),
                   {
@@ -708,11 +743,8 @@
             const code =
               input.password.toUpperCase();
 
-            const existingName =
-              resolveMemberName(data.members, name);
             const existing =
-              existingName ? data.members[existingName] : undefined;
-            const memberKey = existingName ?? name;
+              data.members[name];
 
             // ------------------------------------------------------
             // REATIVAR USUÁRIO REMOVIDO
@@ -727,8 +759,8 @@
               existing.active === false
             ) {
               const ownHash =
-                (await getCredentialHash(memberKey)) ??
-                data.credentials[memberKey];
+                (await getCredentialHash(name)) ??
+                data.credentials[name];
 
               if (!ownHash) {
                 throw new TRPCError({
@@ -753,7 +785,7 @@
                 }
 
                 if (
-                  await verifyParticipantPasswordFlexible(
+                  await verifyParticipantPassword(
                     code,
                     stored,
                   )
@@ -771,7 +803,7 @@
                 });
               }
 
-              data.members[memberKey] = {
+              data.members[name] = {
                 ...existing,
                 eliminated: false,
                 timestamp: null,
@@ -796,11 +828,11 @@
                   code,
                 );
 
-              data.credentials[memberKey] =
+              data.credentials[name] =
                 passwordHash;
 
               await upsertCredentialHash(
-                memberKey,
+                name,
                 passwordHash,
               );
 
@@ -862,7 +894,7 @@
                 await Promise.all(
                   allHashes.map(
                     (stored) =>
-                      verifyParticipantPasswordFlexible(
+                      verifyParticipantPassword(
                         code,
                         stored,
                       ),
@@ -882,7 +914,7 @@
             // CRIAR NOVO PARTICIPANTE
             // ------------------------------------------------------
 
-            data.members[memberKey] = {
+            data.members[name] = {
               eliminated: false,
               timestamp: null,
               reason: "",
@@ -900,11 +932,11 @@
                 code,
               );
 
-            data.credentials[memberKey] =
+            data.credentials[name] =
               passwordHash;
 
             await upsertCredentialHash(
-              memberKey,
+              name,
               passwordHash,
             );
 

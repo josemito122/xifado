@@ -1,3 +1,5 @@
+import { RANKS as SHARED_RANKS, rankForDay as sharedRankForDay } from "../../../shared/xifado.js";
+
 export type Phase = "pre" | "ativo" | "encerrado";
 export type MemberName = string;
 
@@ -40,23 +42,7 @@ export const DEFAULT_SCHEDULE: Schedule = {
   end: "2026-09-30T23:59:00-03:00",
 };
 
-export const RANKS = [
-  { min: 29, max: 30, label: "Monge", symbol: "∞", mark: "♾️" },
-  { min: 27, max: 28, label: "Rei", symbol: "XIV", mark: "👑" },
-  { min: 25, max: 26, label: "General", symbol: "XIII", mark: "⭐⭐⭐" },
-  { min: 23, max: 24, label: "Coronel", symbol: "XII", mark: "⭐" },
-  { min: 21, max: 22, label: "Major", symbol: "XI", mark: "🎖️🎖️🎖️" },
-  { min: 19, max: 20, label: "Capitão", symbol: "X", mark: "🎖️🎖️" },
-  { min: 17, max: 18, label: "Primeiro Tenente", symbol: "IX", mark: "🎖️" },
-  { min: 15, max: 16, label: "Segundo Tenente", symbol: "VIII", mark: "🏅" },
-  { min: 13, max: 14, label: "Asp. a Oficial", symbol: "VII", mark: "⚜️⚜️" },
-  { min: 11, max: 12, label: "Subtenente", symbol: "VI", mark: "⚜️" },
-  { min: 9, max: 10, label: "Primeiro Sargento", symbol: "V", mark: "🥇" },
-  { min: 7, max: 8, label: "Segundo Sargento", symbol: "IV", mark: "🥈" },
-  { min: 5, max: 6, label: "Terceiro Sargento", symbol: "III", mark: "🥉" },
-  { min: 3, max: 4, label: "Cabo", symbol: "II", mark: "🎗️" },
-  { min: 0, max: 2, label: "Soldado", symbol: "I", mark: "🪂" },
-] as const;
+export const RANKS = SHARED_RANKS;
 
 export const emptyMember = (): MemberRecord => ({ eliminated: false, timestamp: null, reason: "", rank: null, duration: null, penaltyDone: false });
 export const defaultRules: RuleRecord[] = [
@@ -120,5 +106,5 @@ export const currentDay = (now: number, schedule: Schedule, phase: Phase) => {
   if (phase === "encerrado") return 30;
   return Math.max(1, Math.min(30, Math.floor((now - Date.parse(schedule.start)) / 86400000) + 1));
 };
-export const rankFor = (day: number) => RANKS.find((rank) => day >= rank.min && day <= rank.max) ?? RANKS[RANKS.length - 1];
+export const rankFor = sharedRankForDay;
 export const initials = (name: string) => { const parts = name.split(" "); return (parts.length > 1 ? `${parts[0][0]}${parts.at(-1)?.[0] ?? ""}` : name.slice(0, 2)).toUpperCase(); };
